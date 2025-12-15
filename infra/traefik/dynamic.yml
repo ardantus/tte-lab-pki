@@ -1,0 +1,18 @@
+http:
+  routers:
+    api:
+      rule: "Host(`api.pki-lab.local`)"
+      service: api
+    ui:
+      rule: "Host(`pki-lab.local`)"
+      service: ui
+  
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: "http://vendor-api:3000"
+    ui:
+      loadBalancer:
+        servers:
+          - url: "http://vendor-ui:3000"

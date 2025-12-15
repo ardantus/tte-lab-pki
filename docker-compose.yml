@@ -1,0 +1,187 @@
+networks:
+  pki-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
+  stepca_root_data:
+  stepca_vendor_data:
+  redis_data:
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik:/etc/traefik/dynamic
+    networks:
+      - pki-net
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tte_pki}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pki-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - pki-net
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9002:9000" # API
+      - "9003:9001" # Console
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - pki-net
+
+  stepca-root:
+    image: smallstep/step-ca
+    container_name: stepca-root
+    environment:
+      DOCKER_STEPCA_INIT_NAME: RegulatorCA
+      DOCKER_STEPCA_INIT_DNS_NAMES: localhost,stepca-root
+    volumes:
+      - ./stepca-root:/home/step
+    ports:
+      - "9001:9000"
+    networks:
+      - pki-net
+    command: /bin/sh -c "exec /usr/local/bin/step-ca --password-file /home/step/secrets/password /home/step/config/ca.json"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "--insecure", "https://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    
+  stepca-vendor:
+    image: smallstep/step-ca
+    container_name: stepca-vendor
+    environment:
+      DOCKER_STEPCA_INIT_NAME: VendorSign
+      DOCKER_STEPCA_INIT_DNS_NAMES: localhost,stepca-vendor
+    volumes:
+      - ./stepca-vendor:/home/step
+    ports:
+      - "9000:9000"
+    networks:
+      - pki-net
+    command: /bin/sh -c "exec /usr/local/bin/step-ca --password-file /home/step/secrets/password /home/step/config/ca.json"
+    depends_on:
+      - stepca-root
+    healthcheck:
+      test: ["CMD", "curl", "-f", "--insecure", "https://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  vendor-api:
+    build: 
+      context: ./vendor-api
+    container_name: vendor-api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tte_pki}?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: documents
+      JWT_SECRET: ${JWT_SECRET:-supersecret}
+      VENDOR_CA_URL: https://stepca-vendor:9000
+      ROOT_CA_URL: https://stepca-root:9000
+      STEP_CA_FINGERPRINT: ${STEP_CA_FINGERPRINT} # To be populated after bootstrap
+    volumes:
+      - ./stepca-vendor/certs/root_ca.crt:/root/.step/certs/root_ca.crt
+      - ./stepca-vendor/secrets/password:/app/secrets/password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.pki-lab.local`) || PathPrefix(`/api`, `/auth`, `/admin`, `/cert`, `/documents`, `/health`)"
+      - "traefik.http.services.api.loadbalancer.server.port=3000"
+    networks:
+      - pki-net
+    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+
+  vendor-worker:
+    build:
+      context: ./vendor-worker
+    container_name: vendor-worker
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tte_pki}?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: documents
+      VENDOR_CA_URL: https://stepca-vendor:9000
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    networks:
+      - pki-net
+    command: node dist/worker.js
+
+  vendor-ui:
+    build:
+      context: ./vendor-ui
+    container_name: vendor-ui
+    environment:
+      NEXT_PUBLIC_API_URL: http://api.pki-lab.local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ui.rule=Host(`pki-lab.local`)"
+      - "traefik.http.services.ui.loadbalancer.server.port=3000"
+    networks:
+      - pki-net

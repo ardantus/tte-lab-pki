@@ -1,0 +1,69 @@
+{
+	"root": "/home/step/certs/root_ca.crt",
+	"federatedRoots": null,
+	"crt": "/home/step/certs/intermediate_ca.crt",
+	"key": "/home/step/secrets/intermediate_ca_key",
+	"address": ":9000",
+	"insecureAddress": "",
+	"dnsNames": [
+		"localhost",
+		"stepca-vendor"
+	],
+	"logger": {
+		"format": "text"
+	},
+	"authority": {
+		"provisioners": [
+			{
+				"type": "JWK",
+				"name": "vendor-admin",
+				"key": {
+					"use": "sig",
+					"kty": "EC",
+					"kid": "rmy8wjf4b1JY9EEI3YxMQvOtZ6a0OJ245T8CK25MOOM",
+					"crv": "P-256",
+					"alg": "ES256",
+					"x": "FXq2pe17axY5Pq1hGJoq0j221zSaYNgCu8FaKeFn218",
+					"y": "tRS6ZXEQwP9jfqOvXyELdZGfVsdYKQUIWvMlTsmA8c8"
+				},
+				"encryptedKey": "eyJhbGciOiJQQkVTMi1IUzI1NitBMTI4S1ciLCJjdHkiOiJqd2sranNvbiIsImVuYyI6IkEyNTZHQ00iLCJwMmMiOjYwMDAwMCwicDJzIjoiTzdTcjZncjdrWjBuZkR6MFRtakhVUSJ9.CHf3L8ciOi-uU-IjFs08kg_Y9oOFAmeCdBEl1N0E-k0F9U7RetXhEA.z9GT_kk1VhWAThT3.6k8jaweSHHnu5vkQSu4GSnP7PzjzTeOZ41rdrslupr-fP70aL5-k_gPqh43v3jxzXjVNNw6zC1hTtoKKIL83okje9S8R3IoFsqVL9Aa_p7B7FBIFwojtsUejimssqAof-_LWesujz62VEoPYzP4rzeZYbcMEqMAGWWDbEhNmClc56QCYfuNaSD8FeUJN9X7HgLpw3s8sxzaziP9EuczwbVPk5zVjha0HmJAgI22PFcpQu0cgnjFAdTXRWbl2MyPl5KLPn8Bjnf9XaiCBgOfdgtdds5_jOgUaKxQILtNzhKYBNkV7q6o_0QRJReIeL_ezJSCeBwQ2FHyBVycL8QI.GPjsmGs7eXJ2MfGayOrR0w"
+			},
+			{
+				"type": "JWK",
+				"name": "user-issuer",
+				"key": {
+					"use": "sig",
+					"kty": "EC",
+					"kid": "qiiAfYt3duVUX6ZZP75RIXO-zRrf1HmwAlZzvF8Jj0M",
+					"crv": "P-256",
+					"alg": "ES256",
+					"x": "CFgIB80Hrl2MkVusVbPG-PHmZqte2rm2gZ2fFhRP8Ws",
+					"y": "F_gvpgJKHwApP2in659CHVnDClaQEgS-oaLIdEq3Rc8"
+				},
+				"encryptedKey": "eyJhbGciOiJQQkVTMi1IUzI1NitBMTI4S1ciLCJjdHkiOiJqd2sranNvbiIsImVuYyI6IkEyNTZHQ00iLCJwMmMiOjYwMDAwMCwicDJzIjoiaEFzc0dMRE44MjZZZ2hLQUF5QnFnUSJ9.CODpm9Iie-iq0W4r0f9At598g6YiANDntjtAscgZHBZCC_PK6KaMtw.PDUApFsUdPO_kajd.ej2NBi2r2eldjGXXlLMFhyfprTvoUtreLuFxlSmCRKjUgBDGxhgrD0nf_aNE90uRxJGpA5VujvH26olveussey3gNrJSo0JrAEN3XiHQrM1yPt11nH0M5IEqKXdkH70U7KO-bwniFwzhXKfS7pRSckY4KQeaiYZxRDsyHviulVKqdJxJM-np2lBNUXozZebiKzhawUgGsh_UX7aDhp2B7p9lES0nBerd_lptwYozszcBpQwrEL9rgGJnKx3UG1JKFoC--JEWvheHw66SaWZf5j_xdDy2No5Y2FcZnnj6cbpRIvAtvDchZM7vV1nA2HBZ9-PpawGmRJBTSLAUeS4.NxG4aQyuBKbcuOn72d8wKQ",
+				"claims": {
+					"enableSSHCA": true,
+					"disableRenewal": false,
+					"allowRenewalAfterExpiry": false,
+					"disableSmallstepExtensions": false
+				},
+				"options": {
+					"x509": {},
+					"ssh": {}
+				}
+			}
+		],
+		"template": {},
+		"backdate": "1m0s"
+	},
+	"tls": {
+		"cipherSuites": [
+			"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+		],
+		"minVersion": 1.2,
+		"maxVersion": 1.3,
+		"renegotiation": false
+	},
+	"commonName": "Step Online CA"
+}

@@ -1,0 +1,34 @@
+{
+    "name": "vendor-api",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+        "prisma:generate": "prisma generate",
+        "prisma:migrate": "prisma migrate deploy"
+    },
+    "dependencies": {
+        "@fastify/cors": "^8.5.0",
+        "@fastify/jwt": "^7.2.4",
+        "@fastify/multipart": "^8.0.0",
+        "@fastify/swagger": "^8.12.0",
+        "@fastify/swagger-ui": "^1.10.1",
+        "@prisma/client": "^5.7.0",
+        "bcrypt": "^5.1.1",
+        "bullmq": "^4.15.0",
+        "dotenv": "^16.3.1",
+        "fastify": "^4.25.1",
+        "minio": "^7.1.3",
+        "zod": "^3.22.4"
+    },
+    "devDependencies": {
+        "@types/bcrypt": "^5.0.2",
+        "@types/node": "^20.10.4",
+        "@types/dotenv": "^8.2.0",
+        "prisma": "^5.7.0",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.3.3"
+    }
+}

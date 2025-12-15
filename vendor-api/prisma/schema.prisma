@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id              String        @id @default(uuid())
+  name            String
+  email           String        @unique
+  phone           String
+  national_id_sim String
+  password_hash   String
+  role            Role          @default(USER)
+  status          UserStatus    @default(PENDING)
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+  
+  certificates    Certificate[]
+  documents       Document[]
+  audit_logs      AuditLog[]
+
+  @@map("users")
+}
+
+enum CertStatus {
+  ISSUED
+  REVOKED
+}
+
+model Certificate {
+  id                String      @id @default(uuid())
+  user_id           String
+  serial            String      @unique
+  subject_dn        String
+  cert_pem          String
+  chain_pem         String
+  issued_at         DateTime    @default(now())
+  revoked_at        DateTime?
+  revocation_reason String?
+  status            CertStatus  @default(ISSUED)
+  
+  user              User        @relation(fields: [user_id], references: [id])
+
+  @@map("certificates")
+}
+
+enum DocStatus {
+  UPLOADED
+  SIGNING
+  SIGNED
+  FAILED
+}
+
+model Document {
+  id            String        @id @default(uuid())
+  user_id       String
+  filename      String
+  s3_key_input  String
+  s3_key_signed String?
+  sha256_input  String
+  sha256_signed String?
+  status        DocStatus     @default(UPLOADED)
+  created_at    DateTime      @default(now())
+  
+  user          User          @relation(fields: [user_id], references: [id])
+  sign_requests SignRequest[]
+
+  @@map("documents")
+}
+
+enum SignStatus {
+  QUEUED
+  PROCESSING
+  SIGNED
+  FAILED
+}
+
+model SignRequest {
+  id            String      @id @default(uuid())
+  document_id   String
+  user_id       String
+  page          Int
+  x             Float
+  y             Float
+  width         Float
+  height        Float
+  reason        String
+  status        SignStatus  @default(QUEUED)
+  created_at    DateTime    @default(now())
+  signed_at     DateTime?
+  error_message String?
+  
+  document      Document    @relation(fields: [document_id], references: [id])
+
+  @@map("sign_requests")
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  actor_type  ActorType
+  actor_id    String?
+  action      String
+  detail_json Json?
+  ip          String?
+  created_at  DateTime  @default(now())
+  
+  user        User?     @relation(fields: [actor_id], references: [id])
+
+  @@map("audit_logs")
+}
