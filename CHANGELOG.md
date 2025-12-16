@@ -23,3 +23,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shared Access**:
     - Allow shared users (Client B) to sign and download documents they do not own.
     - Fixed "Unauthorized" error during file download by including the JWT token in the request header.
+- **Documentation**: Corrected duplicated content in `README.md` to ensure clean and accurate instructions.
