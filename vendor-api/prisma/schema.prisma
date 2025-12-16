@@ -28,6 +28,7 @@ model User {
   password_hash   String
   role            Role          @default(USER)
   status          UserStatus    @default(PENDING)
+  signature_image String?
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
   
@@ -80,8 +81,22 @@ model Document {
   
   user          User          @relation(fields: [user_id], references: [id])
   sign_requests SignRequest[]
+  access        DocumentAccess[]
 
   @@map("documents")
+}
+
+model DocumentAccess {
+  id          String   @id @default(uuid())
+  document_id String
+  user_email  String
+  role        String   @default("SIGNER") // SIGNER, VIEWER
+  created_at  DateTime @default(now())
+
+  document    Document @relation(fields: [document_id], references: [id])
+
+  @@unique([document_id, user_email])
+  @@map("document_access")
 }
 
 enum SignStatus {

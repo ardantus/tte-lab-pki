@@ -1,5 +1,7 @@
 import { PDFDocument, rgb } from 'pdf-lib'
 import * as forge from 'node-forge'
+import * as QRCode from 'qrcode'
+import { Buffer } from 'buffer'
 
 export interface SignOptions {
     pdfBuffer: Buffer
@@ -8,10 +10,12 @@ export interface SignOptions {
     coords: { page: number, x: number, y: number, width: number, height: number }
     reason: string
     name: string
+    signatureImage?: Buffer
+    qrText?: string
 }
 
 export async function signPdf(opts: SignOptions) {
-    const { pdfBuffer, certPem, keyPem, coords, reason } = opts
+    const { pdfBuffer, certPem, keyPem, coords, reason, signatureImage, qrText } = opts
 
     // 1. Load PDF
     const pdfDoc = await PDFDocument.load(pdfBuffer)
@@ -19,26 +23,80 @@ export async function signPdf(opts: SignOptions) {
     // 2. Add Visual Appearance
     const pages = pdfDoc.getPages()
     const pageIndex = coords.page - 1
+
+    console.log(`Signing Debug: Page ${coords.page} (Index ${pageIndex}), Total Pages: ${pages.length}`)
+    console.log(`Signing Debug: Coords`, coords)
+
     if (pageIndex >= 0 && pageIndex < pages.length) {
         const page = pages[pageIndex]
+        const { width: pageWidth, height: pageHeight } = page.getSize()
 
-        // Add a text annotation simulating the stamp
-        page.drawText(`Digitally Signed by:\n${opts.name}\nReason: ${reason}\nTime: ${new Date().toISOString()}`, {
-            x: coords.x,
-            y: coords.y, // URL coordinates usually bottom-left origin in simplified pdf-lib
-            size: 10,
-            maxWidth: coords.width
-        })
+        // Flip Y because Frontend sends Top-Left based Y, but pdf-lib uses Bottom-Left
+        const pdfY = pageHeight - coords.y - coords.height
+        console.log(`Signing Debug: Y-Flip: ${pageHeight} - ${coords.y} - ${coords.height} = ${pdfY}`)
 
-        // Draw a rectangle
-        page.drawRectangle({
-            x: coords.x,
-            y: coords.y, // adjustment might be needed depending on PDF coordinate system (it is bottom-left by default)
-            width: coords.width,
-            height: coords.height,
-            borderColor: rgb(0, 0, 0),
-            borderWidth: 1,
-        })
+        // 2a. Embed Signature Image (if exists) or Text Stamp
+        if (signatureImage) {
+            console.log('Signing Debug: Embedding Signature Image')
+            const embedSig = await pdfDoc.embedPng(signatureImage).catch(async () => await pdfDoc.embedJpg(signatureImage).catch(e => {
+                console.error('Signing Debug: Failed to embed image', e)
+                return null
+            }))
+
+            if (embedSig) {
+                page.drawImage(embedSig, {
+                    x: coords.x,
+                    y: pdfY,
+                    width: coords.width,
+                    height: coords.height
+                })
+            }
+        } else {
+            console.log('Signing Debug: Drawing Text Fallback')
+            // Fallback to text
+            page.drawText(`Digitally Signed by:\n${opts.name}\nReason: ${reason}\nTime: ${new Date().toISOString()}`, {
+                x: coords.x,
+                y: pdfY,
+                size: 10,
+                maxWidth: coords.width
+            })
+            page.drawRectangle({
+                x: coords.x,
+                y: pdfY,
+                width: coords.width,
+                height: coords.height,
+                borderColor: rgb(0, 0, 0),
+                borderWidth: 1,
+            })
+        }
+    } else {
+        console.error(`Signing Debug: Invalid Page Index ${pageIndex}`)
+    }
+
+    // 2b. Embed QR Code (Bottom Right) - ON ALL PAGES
+    if (qrText) {
+        console.log('Signing Debug: Embedding QR Code')
+        const qrBuffer = await QRCode.toBuffer(qrText)
+        const embedQr = await pdfDoc.embedPng(qrBuffer)
+        const qrSize = 50
+
+        // Loop through all pages
+        for (let i = 0; i < pages.length; i++) {
+            const p = pages[i]
+            const { width: pw, height: ph } = p.getSize()
+
+            p.drawImage(embedQr, {
+                x: pw - qrSize - 20,
+                y: 20,
+                width: qrSize,
+                height: qrSize
+            })
+            p.drawText('VendorSign', {
+                x: pw - qrSize - 20,
+                y: 10,
+                size: 8
+            })
+        }
     }
 
     // 3. Prepare Signing

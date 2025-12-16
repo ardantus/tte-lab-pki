@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: 'standalone',
-    // Disable strict mode for lab to avoid double-invocation confusion in logs
     reactStrictMode: false,
+    webpack: (config) => {
+        config.resolve.alias.canvas = false;
+        return config;
+    },
 };
 
 export default nextConfig;

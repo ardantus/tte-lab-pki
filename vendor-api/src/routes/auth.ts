@@ -73,6 +73,48 @@ const authRoutes: FastifyPluginAsync = async (fastify, opts) => {
         return { token }
     })
 
+    // SIGNATURE UPLOAD
+    fastify.post('/signature', {
+        onRequest: [fastify.authenticate]
+    }, async (request: any, reply) => {
+        const data = await request.file()
+        if (!data) return reply.code(400).send({ message: 'No file uploaded' })
+
+        const buffer = await data.toBuffer()
+        // Save to MinIO
+        const key = `signatures/${request.user.id}/${Date.now()}.png`
+        await fastify.minio.putObject('documents', key, buffer)
+
+        // Update User
+        await fastify.prisma.user.update({
+            where: { id: request.user.id },
+            data: { signature_image: key }
+        })
+
+        return { message: 'Signature updated', key }
+    })
+
+    // SIGNATURE GET
+    fastify.get('/signature/image', {
+        onRequest: [fastify.authenticate]
+    }, async (request: any, reply) => {
+        const user = await fastify.prisma.user.findUnique({
+            where: { id: request.user.id }
+        })
+
+        if (!user || !user.signature_image) {
+            return reply.code(404).send({ message: 'No signature found' })
+        }
+
+        const stream = await fastify.minio.getObject(
+            'documents',
+            user.signature_image
+        )
+
+        reply.header('Content-Type', 'image/png')
+        return reply.send(stream)
+    })
+
     // ME
     fastify.get('/me', {
         onRequest: [fastify.authenticate]

@@ -34,10 +34,12 @@ const docsRoutes: FastifyPluginAsync = async (fastify, opts) => {
         const s3Key = `input/${user.id}/${fileId}.pdf`
 
         // Upload to MinIO
+        const buffer = await data.toBuffer()
+
         await fastify.minio.putObject(
             process.env.MINIO_BUCKET || 'documents',
             s3Key,
-            await data.toBuffer()
+            buffer
         )
 
         // Save to DB
@@ -57,17 +59,56 @@ const docsRoutes: FastifyPluginAsync = async (fastify, opts) => {
 
     // LIST
     fastify.get('/', async (request: any, reply) => {
+        // Fetch docs where user is owner OR user's email is in DocumentAccess
         const docs = await fastify.prisma.document.findMany({
-            where: { user_id: request.user.id },
+            where: {
+                OR: [
+                    { user_id: request.user.id },
+                    {
+                        access: {
+                            some: {
+                                user_email: request.user.email
+                            }
+                        }
+                    }
+                ]
+            },
             orderBy: { created_at: 'desc' },
             include: {
                 sign_requests: {
                     orderBy: { created_at: 'desc' },
-                    take: 1
+                    take: 5 // Take more to trace history
+                },
+                access: true, // Include access list
+                user: { // Include owner info
+                    select: { name: true, email: true }
                 }
             }
         })
         return docs
+    })
+
+    // SHARE
+    fastify.post('/:id/share', async (request: any, reply) => {
+        const { id } = request.params
+        const { email } = z.object({ email: z.string().email() }).parse(request.body)
+
+        const doc = await fastify.prisma.document.findUnique({
+            where: { id, user_id: request.user.id }
+        })
+
+        if (!doc) return reply.code(404).send()
+
+        // Create Access
+        const access = await fastify.prisma.documentAccess.create({
+            data: {
+                document_id: doc.id,
+                user_email: email,
+                role: 'SIGNER'
+            }
+        })
+
+        return access
     })
 
     // SIGN REQUEST
@@ -75,8 +116,14 @@ const docsRoutes: FastifyPluginAsync = async (fastify, opts) => {
         const { id } = request.params
         const body = signRequestSchema.parse(request.body)
 
-        const doc = await fastify.prisma.document.findUnique({
-            where: { id, user_id: request.user.id }
+        const doc = await fastify.prisma.document.findFirst({
+            where: {
+                id,
+                OR: [
+                    { user_id: request.user.id },
+                    { access: { some: { user_email: request.user.email } } }
+                ]
+            }
         })
 
         if (!doc) return reply.code(404).send()
@@ -106,13 +153,17 @@ const docsRoutes: FastifyPluginAsync = async (fastify, opts) => {
             data: { status: 'SIGNING' }
         })
 
+        // Determine input file: If already signed, use that as base for next sig
+        const sourceKey = doc.s3_key_signed || doc.s3_key_input
+
         // Enqueue Job
         await fastify.signQueue.add('sign-pdf', {
             signRequestId: signReq.id,
             documentId: doc.id,
             userId: request.user.id,
-            s3KeyInput: doc.s3_key_input,
-            certId: cert.id
+            s3KeyInput: sourceKey,
+            certId: cert.id,
+            ...body
         })
 
         return signReq
@@ -121,22 +172,33 @@ const docsRoutes: FastifyPluginAsync = async (fastify, opts) => {
     // DOWNLOAD
     fastify.get('/:id/download', async (request: any, reply) => {
         const { id } = request.params
-        const doc = await fastify.prisma.document.findUnique({
-            where: { id, user_id: request.user.id }
+        const doc = await fastify.prisma.document.findFirst({
+            where: {
+                id,
+                OR: [
+                    { user_id: request.user.id },
+                    { access: { some: { user_email: request.user.email } } }
+                ]
+            }
         })
 
         if (!doc) return reply.code(404).send()
 
-        if (doc.status !== 'SIGNED' || !doc.s3_key_signed) {
-            return reply.code(400).send({ message: 'Document not signed yet' })
+        // If signed, download signed. If not, download input (for preview/signing).
+        let s3Key = doc.s3_key_signed
+        let filename = `signed_${doc.filename}`
+
+        if (doc.status !== 'SIGNED' || !s3Key) {
+            s3Key = doc.s3_key_input
+            filename = doc.filename
         }
 
         const stream = await fastify.minio.getObject(
             process.env.MINIO_BUCKET || 'documents',
-            doc.s3_key_signed
+            s3Key!
         )
 
-        reply.header('Content-Disposition', `attachment; filename="signed_${doc.filename}"`)
+        reply.header('Content-Disposition', `attachment; filename="${filename}"`)
         return reply.send(stream)
     })
 }

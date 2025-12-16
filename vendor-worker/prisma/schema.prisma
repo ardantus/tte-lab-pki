@@ -28,6 +28,7 @@ model User {
   password_hash   String
   role            Role          @default(USER)
   status          UserStatus    @default(PENDING)
+  signature_image String?
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
   

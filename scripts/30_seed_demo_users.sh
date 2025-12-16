@@ -6,7 +6,7 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
-API_URL="http://localhost:8080"
+API_URL="http://api.pki-lab.local"
 echo "Seeding users to $API_URL..."
 
 # Helper to check if API is up
@@ -33,9 +33,9 @@ echo "Registering Admin..."
 curl -s -X POST $API_URL/auth/register -H "Content-Type: application/json" -d '{
   "name": "Super Admin",
   "email": "admin@vendorsign.local",
-  "phone": "00000000",
-  "national_id_sim": "000",
-  "password": "admin"
+  "phone": "081234567890",
+  "national_id_sim": "1234567890",
+  "password": "password123"
 }' || true
 
 echo "Registering Client A..."

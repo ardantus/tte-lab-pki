@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-API_URL="http://localhost:8080"
+API_URL="http://api.pki-lab.local"
 echo "Starting Demo Flow..."
 
 # 1. Login Admin
 echo "1. Login Admin..."
-TOKEN_ADMIN=$(curl -s -X POST $API_URL/auth/login -H "Content-Type: application/json" -d '{"email":"admin@vendorsign.local","password":"admin"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+TOKEN_ADMIN=$(curl -s -X POST $API_URL/auth/login -H "Content-Type: application/json" -d '{"email":"admin@vendorsign.local","password":"password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
 if [ -z "$TOKEN_ADMIN" ]; then echo "Login failed"; exit 1; fi
 echo "Admin Token obtained."
@@ -41,40 +41,42 @@ echo "Certificate Serial: $SERIAL"
 # 5. Upload PDF
 echo "6. Uploading PDF..."
 # Create dummy PDF if not exists
-if [ ! -f samples/sample.pdf ]; then
+# Check for sample PDF in root samples dir or local samples dir
+SAMPLE_FILE=""
+if [ -s "../samples/sample.pdf" ]; then
+    SAMPLE_FILE="../samples/sample.pdf"
+elif [ -s "samples/sample.pdf" ]; then
+    SAMPLE_FILE="samples/sample.pdf"
+else
     mkdir -p samples
-    echo "PDF Content" > samples/sample.pdf # Invalid PDF but uploaded as bytes
+    echo "Downloading sample PDF..."
+    curl -L -o samples/sample.pdf https://raw.githubusercontent.com/mozilla/pdf.js/master/test/pdfs/tracemonkey.pdf || echo "Dummy PDF Content" > samples/sample.pdf
+    SAMPLE_FILE="samples/sample.pdf"
 fi
 
-# We need a real PDF for the worker to parse.
-# Download a minimal PDF or skip worker success check.
-# The worker uses pdf-lib which needs valid PDF.
-# Let's trust the user has put one or download one.
-if [ ! -s samples/sample.pdf ]; then
-    curl -s -o samples/sample.pdf https://pdf-lib.js.org/assets/with_update_sections.pdf || echo "Dummy" > samples/sample.pdf
-fi
+echo "Using sample file: $SAMPLE_FILE"
 
-DOC_ID=$(curl -s -X POST -H "Authorization: Bearer $TOKEN_USER" -F "file=@samples/sample.pdf" $API_URL/docs/upload | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+DOC_ID=$(curl -s -X POST -H "Authorization: Bearer $TOKEN_USER" -F "file=@$SAMPLE_FILE" $API_URL/documents/upload | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
 echo "Document ID: $DOC_ID"
 
 # 6. Sign Document
 echo "7. Signing Document (Page 1, 100, 100)..."
 curl -s -X POST -H "Authorization: Bearer $TOKEN_USER" -H "Content-Type: application/json" \
     -d '{"page":1, "x":100, "y":100, "width":200, "height":50, "reason":"Demo Script Sign"}' \
-    "$API_URL/docs/$DOC_ID/sign"
+    "$API_URL/documents/$DOC_ID/sign"
 
 echo "Signing queued. Waiting 5s..."
 sleep 5
 
 # 7. Check Status
 echo "8. Checking Status..."
-STATUS=$(curl -s -H "Authorization: Bearer $TOKEN_USER" $API_URL/docs | grep -o '"status":"[^"]*"' | head -n 1)
+STATUS=$(curl -s -H "Authorization: Bearer $TOKEN_USER" $API_URL/documents | grep -o '"status":"[^"]*"' | head -n 1)
 echo "Status: $STATUS"
 
 # 8. Download
 if [[ "$STATUS" == *"SIGNED"* ]]; then
     echo "9. Downloading Signed PDF..."
-    curl -s -H "Authorization: Bearer $TOKEN_USER" "$API_URL/docs/$DOC_ID/download" -o samples/signed_output.pdf
+    curl -s -H "Authorization: Bearer $TOKEN_USER" "$API_URL/documents/$DOC_ID/download" -o samples/signed_output.pdf
     echo "Downloaded to samples/signed_output.pdf"
 else
     echo "Document not yet signed. Worker might be slow or failed."

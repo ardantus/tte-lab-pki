@@ -19,6 +19,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--entrypoints.web.address=:80"
+      - "--accesslog=true"
     ports:
       - "80:80"
       - "8080:8080" # Dashboard
@@ -150,7 +151,7 @@ services:
       - "traefik.http.services.api.loadbalancer.server.port=3000"
     networks:
       - pki-net
-    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+    command: sh -c "npx prisma db push --schema=./prisma/schema.prisma && node dist/index.js"
 
   vendor-worker:
     build:
@@ -176,6 +177,8 @@ services:
   vendor-ui:
     build:
       context: ./vendor-ui
+      args:
+        NEXT_PUBLIC_API_URL: http://api.pki-lab.local
     container_name: vendor-ui
     environment:
       NEXT_PUBLIC_API_URL: http://api.pki-lab.local

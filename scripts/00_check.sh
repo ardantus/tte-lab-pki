@@ -12,8 +12,12 @@ if ! command -v jq &> /dev/null; then
     echo "Warning: jq is not installed. Some scripts might require it."
 fi
 
-if [ ! -f .env ]; then
-    echo "Error: .env file not found. Please copy .env.example to .env"
+# Get project root (assuming script is in scripts/ subdir)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    echo "Error: .env file not found at $PROJECT_ROOT/.env. Please copy .env.example to .env"
     exit 1
 fi
 

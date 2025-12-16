@@ -18,7 +18,8 @@ import redisPlugin, { RedisPluginOptions } from './plugins/redis'
 import minioPlugin, { MinioPluginOptions } from './plugins/minio'
 
 const server: FastifyInstance = Fastify({
-    logger: true
+    logger: true,
+    bodyLimit: 30 * 1024 * 1024 // 30MB
 })
 
 // Types
@@ -36,10 +37,16 @@ async function start() {
 
         // 2. Register Core Plugins
         await server.register(cors, {
-            origin: '*' // In production configure strict CORS
+            origin: true, // Reflect request origin
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization']
         })
 
-        await server.register(multipart)
+        await server.register(multipart, {
+            limits: {
+                fileSize: 10000000 // 10MB
+            }
+        })
 
         await server.register(jwt, {
             secret: JWT_SECRET
@@ -89,6 +96,11 @@ async function start() {
         // Health Check
         server.get('/health', async () => {
             return { status: 'ok' }
+        })
+
+        // Root Route
+        server.get('/', async () => {
+            return { message: 'TTE Vendor API is running' }
         })
 
         // 6. Start Server

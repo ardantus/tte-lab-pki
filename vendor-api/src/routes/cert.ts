@@ -50,7 +50,7 @@ const certRoutes: FastifyPluginAsync = async (fastify, opts) => {
             // "step certificate create" asks for password for key if not --no-password. --insecure for no password on key (we encrypt later in DB)
             // But we want to automate.
 
-            await execAsync(`step certificate create "${subject}" "${csrFile}" "${keyFile}" --csr --no-password --insecure --san "${user.email}"`)
+            await execAsync(`step certificate create "${subject}" "${csrFile}" "${keyFile}" --csr --no-password --insecure --san "${user.email}" --kty=RSA --size=2048`)
 
             // Sign with CA
             // We use the "vendor-admin" provisioner which uses password

@@ -51,7 +51,25 @@ const worker = new Worker('sign-queue', async job => {
             privateKeyPem = Buffer.from(cert.chain_pem, 'base64').toString('utf8')
         }
 
-        // 5. Sign PDF
+        // 5. Fetch Signature Image if exists
+        let signatureImageBuffer: Buffer | undefined
+        if (job.data.userId) {
+            const user = await prisma.user.findUnique({ where: { id: job.data.userId } })
+            if (user?.signature_image) {
+                console.log(`Worker: Fetching signature image from ${user.signature_image}`)
+                try {
+                    const sigStream = await minio.getObject('documents', user.signature_image)
+                    signatureImageBuffer = await streamToBuffer(sigStream)
+                    console.log(`Worker: Signature image loaded, size: ${signatureImageBuffer.length}`)
+                } catch (e) {
+                    console.warn('Failed to download signature image', e)
+                }
+            } else {
+                console.log('Worker: No signature image found for user')
+            }
+        }
+
+        // 6. Sign PDF
         const { signedPdf, sha256Input, sha256Signed } = await signPdf({
             pdfBuffer,
             certPem: cert.cert_pem,
@@ -64,7 +82,9 @@ const worker = new Worker('sign-queue', async job => {
                 height: job.data.height
             },
             reason: job.data.reason,
-            name: cert.subject_dn // extract name better if possible
+            name: cert.subject_dn,
+            signatureImage: signatureImageBuffer,
+            qrText: `VendorSign Verification\nSigner: ${cert.subject_dn}\nSerial: ${cert.serial}\nDate: ${new Date().toISOString()}`
         })
 
         // 6. Upload Signed PDF
